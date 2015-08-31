@@ -1,0 +1,10 @@
+f9a9715b7acebb557d26a9df05910cf3 *DESCRIPTION
+d7a69816a047690cb86eaa35d33d94e2 *NAMESPACE
+85a95f13ade08c4b08391c02a2cab955 *R/MIXFIM.R
+0745da53f044e31c848a5bfb6aedee93 *inst/extdata/model_b_given_y.stan
+3b8e735db5d660965b8a927bdb8e6ef6 *inst/extdata/model_derivatives.stan
+20f10bfe24be03cb3b0d52361d0b9705 *inst/extdata/model_y.stan
+23e5782ba329315ea62d090c94d5c0ac *man/MIXFIM-package.Rd
+902e740595cd693bd4fcf5f9804b8fb2 *man/fisher_evaluation.Rd
+0b8913d275fc01965d093f19b7b8937f *man/fisher_optimization.Rd
+04e17c25aaae538ae57ec57cd375e716 *man/template_model.Rd
