@@ -30,9 +30,6 @@ Riviere, M-K., Ueckert, S. and Mentre, F,. Evaluation of the Fisher information 
 \author{Marie-Karelle Riviere-Jourdan \email{eldamjh@gmail.com}}
 \examples{
 # UNCOMMENT EXAMPLES
-#test1 = template_model(dloglik=FALSE, nb_t=4, outcome="continuous", 
-#nb_params=5, ind_RE=c(3,4), Sigma_fun_b=TRUE, name="test1")
-
 #test2 = template_model(dloglik=TRUE, nb_t=13, outcome="binary", 
 #nb_params=3, ind_RE=c(3), n_rep=1, name="test2")
 

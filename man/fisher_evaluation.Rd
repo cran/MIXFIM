@@ -59,10 +59,14 @@ Riviere, M-K., Ueckert, S. and Mentre, F,. Evaluation of the Fisher information 
 \author{Marie-Karelle Riviere-Jourdan \email{eldamjh@gmail.com}}
 
 \examples{
-times = c(0.5,1,2,6,24,36,72,120)
-params = c(1,8,0.15,0.6,0.02,0.07,0.1) 
- 
-# UNCOMMENT EXAMPLE
+
+############################
+# PLEASE UNCOMMENT EXAMPLE #
+############################
+#times = c(0.5,1,2,6,24,36,72,120)
+#params = c(1,8,0.15,0.6,0.02,0.07,0.1)
+
+# Files cen be found in external data
 #model = stan_model("model_b_given_y.stan")
 #model2 = stan_model("model_derivatives.stan")
 #model3 = stan_model("model_y.stan")

@@ -17,8 +17,8 @@ Riviere, M-K., Ueckert, S. and Mentre, F,. Evaluation of the Fisher information 
 \tabular{ll}{
 Package: \tab MIXFIM\cr
 Type: \tab Package\cr
-Version: \tab 1.0\cr
-Date: \tab 2015-08-017\cr
+Version: \tab 1.1\cr
+Date: \tab 2018-11-16\cr
 License: \tab GPL-3\cr
 }
 }

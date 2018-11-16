@@ -7,7 +7,7 @@
 \usage{
 fisher_optimization(nb_t, set_t, y_ini, model, model2, model3, params, dim_b, 
 set_seed=TRUE, seed=42, step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, 
-n_burn, L_boot=1000, plot_graph=TRUE, nb_patients=1)
+n_burn, L_boot=1000, plot_graph=TRUE, nb_patients=1, det_graph=FALSE)
 }
 
 \arguments{                
@@ -30,6 +30,7 @@ n_burn, L_boot=1000, plot_graph=TRUE, nb_patients=1)
   \item{L_boot}{Number of samples for bootstrap estimation of the confidence intervals of the determinant of the FIM. The default value is set at 1000.} 
   \item{plot_graph}{A boolean indicating if at each step (every \code{step_mc}), a graph with the determinant of the FIM and its bootstrap confidence intervals for the remaining combinations of sampling times should be plotted and saved. The default value is set at TRUE.}
   \item{nb_patients}{Number of patients with the same elementary design for which the FIM and its determinant are evaluated. The default value is set at 1.}
+  \item{det_graph}{A boolean indicating if the normalized determinant of the FIM for the selected optimal design should be plotted in function of the number of MC samples. The default value is set at FALSE.}
 }
 
 \details{
@@ -60,14 +61,19 @@ In addition, for the optimal protocol selected at the end, a graph of the normal
 \author{Marie-Karelle Riviere-Jourdan \email{eldamjh@gmail.com}}
 
 \examples{
-params = c(1,8,0.15,0.6,0.02,0.07,0.1)
-times_poss = c(0.1,0.5,1,2,3,6,12,24,36,48,72,120,240)
 
-# UNCOMMENT EXAMPLE
+############################
+# PLEASE UNCOMMENT EXAMPLE #
+############################
+#params = c(1,8,0.15,0.6,0.02,0.07,0.1)
+#times_poss = c(0.1,0.5,1,2,3,6,12,24,36,48,72,120,240)
+
+# Files can be found in external data
 #model = stan_model("model_b_given_y.stan")
 #model2 = stan_model("model_derivatives.stan")
 #model3 = stan_model("model_y.stan")
-#opt1 = fisher_optimization(nb_t=3, ens_t=times_poss, y_ini=0.5, model=model, 
+
+#opt1 = fisher_optimization(nb_t=3, set_t=times_poss, y_ini=0.5, model=model, 
 #model2=model2, model3=model3, params=params, dim_b=3, set_seed=TRUE, seed=42, 
 #step_mc=100, n_samp_min=30, n_samp_max=2000, n_rep=1, n_iter=500, n_burn=500,
 #nb_patients=32)

@@ -1,14 +1,19 @@
 library(rstan)
 library(mvtnorm)
 library(ggplot2)
- 
+                
 result_fisher_eval = function(nb_params, mat_A_k1, mat_A_k2, n_iter, n_samp, mean_b, params, nb_patients=1){
 
   Fisher_matrix_covar_temp = array(NA, dim=c(nb_params,nb_params,nb_params,nb_params))
   Fisher_matrix_covar = array(NA, dim=c(nb_params,nb_params,nb_params,nb_params))
   
 mean_b = mean_b/(n_samp*2*n_iter)
-  Fisher_matrix = crossprod(mat_A_k1[1:n_samp,], mat_A_k2[1:n_samp,])/n_samp
+  if(n_samp > 1){
+    Fisher_matrix = crossprod(mat_A_k1[1:n_samp,], mat_A_k2[1:n_samp,])/n_samp
+  }
+  else if(n_samp == 1){
+    Fisher_matrix = tcrossprod(mat_A_k1[1,], mat_A_k2[1,])
+  }
   for(i in 1:nb_params){
     for(j in 1:nb_params){
       for(k in 1:nb_params){
@@ -20,14 +25,23 @@ mean_b = mean_b/(n_samp*2*n_iter)
     }
   }
   
-  mean_dloglik1 = colMeans(mat_A_k1[1:n_samp,])
-  mean_dloglik2 = colMeans(mat_A_k2[1:n_samp,])
-  var_dloglik1 = (colMeans(mat_A_k1[1:n_samp,]^2) - mean_dloglik1^2)/n_samp
-  var_dloglik2 = (colMeans(mat_A_k2[1:n_samp,]^2) - mean_dloglik2^2)/n_samp
+  if(n_samp > 1){
+    mean_dloglik1 = colMeans(mat_A_k1[1:n_samp,])
+    mean_dloglik2 = colMeans(mat_A_k2[1:n_samp,])
+    var_dloglik1 = (colMeans(mat_A_k1[1:n_samp,]^2) - mean_dloglik1^2)/n_samp
+    var_dloglik2 = (colMeans(mat_A_k2[1:n_samp,]^2) - mean_dloglik2^2)/n_samp
+  }
+  else if(n_samp == 1){
+    mean_dloglik1 = mat_A_k1[1,]
+    mean_dloglik2 = mat_A_k2[1,]
+    var_dloglik1 = (mat_A_k1[1,]^2 - mean_dloglik1^2)/n_samp
+    var_dloglik2 = (mat_A_k2[1,]^2 - mean_dloglik2^2)/n_samp
+  }
   
   Fisher_matrix = (Fisher_matrix + t(Fisher_matrix))/2
   Fisher_matrix = nb_patients*Fisher_matrix
-  if(det(Fisher_matrix) < 1e-02){
+  inv_fim = try(solve(Fisher_matrix), silent = TRUE) 
+  if(!is.null(attributes(inv_fim)$class)){
     inv_fim = NA
     det_norm_Fisher_matrix = det(Fisher_matrix)^(1/nb_params)
     RSE = NA
@@ -60,39 +74,51 @@ mean_b = mean_b/(n_samp*2*n_iter)
 
 
 bootstrap_ic_det = function(mat_A_k1, mat_A_k2, n_samp, nb_params, L, normalized=TRUE, nb_patients=1){
-  vec_det_fim = numeric(L)
-  for(l in 1:L){
-    ind_boot = sample(1:n_samp, n_samp, replace=TRUE)
-    fim = crossprod(mat_A_k1[ind_boot,], mat_A_k2[ind_boot,])/n_samp
-    fim = (fim + t(fim))/2
-    fim = nb_patients*fim
-    det_fim = det(fim)
-    if(normalized==TRUE){
-      det_fim = det_fim^(1/nb_params)
+  if(L > 0){
+    vec_det_fim = numeric(L)
+      for(l in 1:L){
+      ind_boot = sample(1:n_samp, n_samp, replace=TRUE)
+      fim = crossprod(mat_A_k1[ind_boot,], mat_A_k2[ind_boot,])/n_samp
+      fim = (fim + t(fim))/2
+      fim = nb_patients*fim
+      det_fim = det(fim)
+      if(normalized==TRUE){
+        det_fim = det_fim^(1/nb_params)
+      }
+      vec_det_fim[l] = det_fim
     }
-    vec_det_fim[l] = det_fim
+    binf = quantile(vec_det_fim, 0.025, na.rm=TRUE)
+    bsup = quantile(vec_det_fim, 0.975, na.rm=TRUE)
   }
-  binf = quantile(vec_det_fim, 0.025, na.rm=TRUE)
-  bsup = quantile(vec_det_fim, 0.975, na.rm=TRUE)
+  else{
+    binf = NA
+    bsup = NA
+  }
   return(list("binf"=binf, "bsup"=bsup))
 }
 
 
 bootstrap_ic_rse = function(mat_A_k1, mat_A_k2, n_samp, nb_params, L, params, nb_patients=1){
-  mat_rse_fim = matrix(0, nrow=L, ncol=nb_params)
-  binf = numeric(nb_params)
-  bsup = numeric(nb_params)
-  for(l in 1:L){
-    ind_boot = sample(1:n_samp, n_samp, replace=TRUE)
-    fim = crossprod(mat_A_k1[ind_boot,], mat_A_k2[ind_boot,])/n_samp
-    fim = (fim + t(fim))/2
-    fim = nb_patients*fim
-    rse = sqrt(diag(solve(fim)))/params*100
-    mat_rse_fim[l,] = rse
+  if(L > 0){
+    mat_rse_fim = matrix(0, nrow=L, ncol=nb_params)
+    binf = numeric(nb_params)
+    bsup = numeric(nb_params)
+    for(l in 1:L){
+      ind_boot = sample(1:n_samp, n_samp, replace=TRUE)
+      fim = crossprod(mat_A_k1[ind_boot,], mat_A_k2[ind_boot,])/n_samp
+      fim = (fim + t(fim))/2
+      fim = nb_patients*fim
+      rse = sqrt(diag(solve(fim)))/params*100
+      mat_rse_fim[l,] = rse
+    }
+    for(p in 1:nb_params){
+      binf[p] = quantile(mat_rse_fim[,p], 0.025, na.rm=TRUE)
+      bsup[p] = quantile(mat_rse_fim[,p], 0.975, na.rm=TRUE)
+    }
   }
-  for(p in 1:nb_params){
-    binf[p] = quantile(mat_rse_fim[,p], 0.025, na.rm=TRUE)
-    bsup[p] = quantile(mat_rse_fim[,p], 0.975, na.rm=TRUE)
+  else{
+    binf = NA
+    bsup = NA
   }
   return(list("binf"=binf, "bsup"=bsup))
 }
@@ -115,12 +141,15 @@ mean_b=numeric(dim_b)
   # Sampling y in its marginal distribution
   sample_y = matrix(NA,nrow=n_samp*n_rep, ncol=nb_t)
   data_cur = list(params=params, mu_b=rep(0, dim_b), t=t, nb_t=nb_t, dim_b=dim_b, n_rep=n_rep)
+  dim(data_cur$mu_b)=dim_b
+  dim(data_cur$t)=nb_t
   if(dim_b > 1){
     init_cur  = list(y=y_ini, b=rmvnorm(1, mean = rep(0, dim_b), sigma = diag(rep(0.1, dim_b)))[1,])
   }
   else if(dim_b == 1){
     init_cur  = list(y=y_ini, b=rnorm(1, 0, sqrt(0.1)))
   }
+  dim(init_cur$b)=dim_b
   temp_sample_y = extract(sampling(model3, data=data_cur, chains=1, init=list(init_cur), warmup=0, iter=n_samp, thin=1, refresh=-1,algorithm="Fixed_param"), permuted=FALSE)
   for(ind_y_samp in 1:n_samp){
     y_samp = temp_sample_y[ind_y_samp,1,which(grepl("y",names(temp_sample_y[1,,]))==TRUE)]
@@ -136,6 +165,8 @@ mean_b=numeric(dim_b)
 print(ind_y_samp)
     smp_y = sample_y[(n_rep*(ind_y_samp-1)+1):(n_rep*ind_y_samp),]
     data_cur = list(y=smp_y, params=params, mu_b=rep(0, dim_b), t=t, nb_t=nb_t, dim_b=dim_b, n_rep=n_rep)
+    dim(data_cur$mu_b)=dim_b
+    dim(data_cur$t)=nb_t
     init_cur = list(b=temp_sample_y[ind_y_samp,1,1:dim_b])
     if(dim_b > 1){
       init_cur2 = list(b=rmvnorm(1, mean = rep(0, dim_b), sigma = diag(rep(0.1, dim_b)))[1,])
@@ -143,24 +174,36 @@ print(ind_y_samp)
     else if(dim_b == 1){
       init_cur2 = list(b=rnorm(1, 0, sqrt(0.1)))
     }
+    dim(init_cur$b)=dim_b
+    dim(init_cur2$b)=dim_b
     sample_b_sY = extract(sampling(model, data=data_cur, chains=2, init=list(init_cur, init_cur2), warmup=n_burn, iter=10*n_iter+n_burn, thin=10, refresh=-1), permuted=FALSE)
    
     matA_b_k1 = matrix(NA, nrow=n_iter, ncol=nb_params)
     matA_b_k2 = matrix(NA, nrow=n_iter, ncol=nb_params)
     data_cur2 = list(y=smp_y, mu_b=rep(0, dim_b), t=t, nb_t=nb_t, dim_b=dim_b, n_rep=n_rep)
+    dim(data_cur2$mu_b)=dim_b
+    dim(data_cur2$t)=nb_t
     init_cur2 = list(params=params, b=init_cur$b)
     log_lik = sampling(model2, data=data_cur2, chains=1, init=list(init_cur2), warmup=0, iter=1, refresh=-1, algorithm="Fixed_param")
     for(ind_b in 1:n_iter){
       b_samp1 = sample_b_sY[ind_b,1,1:dim_b]
       b_samp2 = sample_b_sY[ind_b,2,1:dim_b]   
+      dim(b_samp1)=dim_b
+      dim(b_samp2)=dim_b
 mean_b = mean_b+b_samp1+b_samp2  
       upars1 = unconstrain_pars(log_lik, list(params=params, b=b_samp1))
       upars2 = unconstrain_pars(log_lik, list(params=params, b=b_samp2))
       matA_b_k1[ind_b,] = grad_log_prob(log_lik, upars1, adjust_transform=FALSE)[1:nb_params]
       matA_b_k2[ind_b,] = grad_log_prob(log_lik, upars2, adjust_transform=FALSE)[1:nb_params] 
     }
-    mat_A_k1[ind_y_samp,] = colMeans(matA_b_k1[1:n_iter,])
-    mat_A_k2[ind_y_samp,] = colMeans(matA_b_k2[1:n_iter,])
+    if(n_iter > 1){
+      mat_A_k1[ind_y_samp,] = colMeans(matA_b_k1[1:n_iter,])
+      mat_A_k2[ind_y_samp,] = colMeans(matA_b_k2[1:n_iter,])
+    }
+    else if(n_iter == 1){
+      mat_A_k1[ind_y_samp,] = matA_b_k1[1,]
+      mat_A_k2[ind_y_samp,] = matA_b_k2[1,]
+    }
     
     if(ind_y_samp>=50 && plot_graph != 0 && ind_y_samp %% 10 == 0){
       res_temp = result_fisher_eval(nb_params, mat_A_k1, mat_A_k2, n_iter, ind_y_samp, mean_b, params, nb_patients)
@@ -202,22 +245,35 @@ mean_b = mean_b+b_samp1+b_samp2
   res_final = result_fisher_eval(nb_params, mat_A_k1, mat_A_k2, n_iter, n_samp, mean_b, params, nb_patients)
   Fisher_matrix = res_final$FIM
   inv_FIM = res_final$inv_FIM
-  Fisher_matrix_covar = res_final$FIM_covar
-  det_norm_Fisher_matrix= res_final$det_norm_FIM
-  var_det_norm_Fisher_matrix= res_final$var_det_norm_FIM
-  born_normal_inf = max(det_norm_Fisher_matrix - 1.96*sqrt(var_det_norm_Fisher_matrix), 0)
-  born_normal_sup = det_norm_Fisher_matrix + 1.96*sqrt(var_det_norm_Fisher_matrix)
-  born_boot_final = bootstrap_ic_det(mat_A_k1, mat_A_k2, n_samp, nb_params, L_boot, normalized=TRUE, nb_patients)
+  if(anyNA(inv_FIM)==FALSE){
+    Fisher_matrix_covar = res_final$FIM_covar
+    det_norm_Fisher_matrix= res_final$det_norm_FIM
+    var_det_norm_Fisher_matrix= res_final$var_det_norm_FIM
+    born_normal_inf = max(det_norm_Fisher_matrix - 1.96*sqrt(var_det_norm_Fisher_matrix), 0)
+    born_normal_sup = det_norm_Fisher_matrix + 1.96*sqrt(var_det_norm_Fisher_matrix)
+    born_boot_final = bootstrap_ic_det(mat_A_k1, mat_A_k2, n_samp, nb_params, L_boot, normalized=TRUE, nb_patients)
+    RSE = res_final$RSE
+    boot_rse = bootstrap_ic_rse(mat_A_k1, mat_A_k2, n_samp, nb_params, L_boot, params, nb_patients)
+    rse_inf_boot = boot_rse$binf
+    rse_sup_boot = boot_rse$bsup
+  }
+  else{
+    Fisher_matrix_covar = NA
+    det_norm_Fisher_matrix= NA
+    var_det_norm_Fisher_matrix= NA
+    born_normal_inf = NA
+    born_normal_sup = NA
+    born_boot_final = list("binf"=NA, "bsup"=NA)
+    RSE = NA
+    rse_inf_boot = NA
+    rse_sup_boot = NA
+  }
   mean_dloglik1 = res_final$mean_dloglik1
   mean_dloglik2 = res_final$mean_dloglik2
   var_dloglik1 = res_final$var_dloglik1
   var_dloglik2 = res_final$var_dloglik1
   mean_b = res_final$mean_b
-  RSE = res_final$RSE
-  boot_rse = bootstrap_ic_rse(mat_A_k1, mat_A_k2, n_samp, nb_params, L_boot, params, nb_patients)
-  rse_inf_boot = boot_rse$binf
-  rse_sup_boot = boot_rse$bsup
-  
+
   res = NA
   if(CV==TRUE){
     res = list("FIM"=Fisher_matrix, "FIM_covar" = Fisher_matrix_covar, "inv_FIM"=inv_FIM,
@@ -491,7 +547,7 @@ phase_select = function(mat_comb, y_ini, model, model2, model3, params, dim_b, s
 
 
 fisher_optimization = function(nb_t, set_t, y_ini, model, model2, model3, params, dim_b, set_seed=TRUE, seed=42, 
-step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, n_burn, L_boot=1000, plot_graph=TRUE, nb_patients=1){
+step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, n_burn, L_boot=1000, plot_graph=TRUE, nb_patients=1, det_graph=FALSE){
   mat_comb = combn(set_t, nb_t)
   nb_poss = ncol(mat_comb)
   nb_params = length(params)
@@ -530,7 +586,7 @@ step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, n_burn, L_boot=1000, plot_g
     list_bsup[[p]] = res[[3]][[2]]
     res_A[[p]] = res[[3]][[3]]
   }
-  if(ncol(mat_comb)>1){
+  if(ncol(as.matrix(mat_comb))>1){
     p = p+1
     ind_max = which.max(res[[3]][[1]])
     mat_comb = mat_comb[,ind_max]
@@ -547,8 +603,9 @@ step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, n_burn, L_boot=1000, plot_g
   plot_var_det = c()
   plot_binf_boot = c()
   plot_bsup_boot = c()
-  for(step_p in 1:(p-1)){
-    ind_opt_p = which(list_select[[step_p]][1:nb_t,]==opt_t)
+
+  for(step_p in 1:max(p-1,1)){ 
+    ind_opt_p = which(apply(list_select[[step_p]], 2, identical, opt_t)==TRUE)
     res_temp = result_fisher_eval(nb_params, res_A[[step_p]][[ind_opt_p]][[1]], res_A[[step_p]][[ind_opt_p]][[2]], n_iter, n_samp_min+step_mc*(step_p-1), 0, params, nb_patients)
     Fisher_matrix = list_fim[[step_p]][[ind_opt_p]]
     Fisher_matrix_covar = res_temp$FIM_covar
@@ -562,33 +619,41 @@ step_mc, n_samp_min=30, n_samp_max, n_rep=1, n_iter, n_burn, L_boot=1000, plot_g
     # IC bootstrap
     born_boot_inf = list_binf[[step_p]][ind_opt_p]
     born_boot_sup = list_bsup[[step_p]][ind_opt_p]
-    plot_binf_boot = c(plot_binf_boot, born_boot_inf)
-    plot_bsup_boot = c(plot_bsup_boot, born_boot_sup)   
+    plot_binf_boot = c(plot_binf_boot, born_boot_inf^(1/nb_params))
+    plot_bsup_boot = c(plot_bsup_boot, born_boot_sup^(1/nb_params))   
   }
-  plot_interv_inf = pmax(plot_det - 1.96*sqrt(plot_var_det), 0)
-  plot_interv_sup = plot_det + 1.96*sqrt(plot_var_det)
-  lim_y = c(min(plot_interv_inf, plot_binf_boot, na.rm=TRUE), 1.1*max(plot_interv_sup, plot_bsup_boot, na.rm=TRUE))
-  plot(n_samp_min+step_mc*(0:(p-2)), plot_det, xlim=c(1,n_samp_min+step_mc(p-2)), xlab="Number of MC samples", ylab="Normalized determinant of the FIM",
-  ylim=lim_y, type = "l", col=1, bty='n', lwd=2, main = paste(expression(det(FIM)^frac(1,p)), " for optimal design", sep=""))
-  lines(n_samp_min+step_mc*(0:(p-2)), plot_interv_inf, type = "l", col=3, lty=2)
-  lines(n_samp_min+step_mc*(0:(p-2)), plot_interv_sup, type = "l", col=3, lty=2)
-  lines(n_samp_min+step_mc*(0:(p-2)), plot_binf_boot, type = "l", col=2, lty=2)
-  lines(n_samp_min+step_mc*(0:(p-2)), plot_bsup_boot, type = "l", col=2, lty=2)
-  legend(x=0.6*n_samp_min+step_mc(p-2),y=lim_y[2],legend=c("IC normal", "IC bootstrap"),col=c(3,2),lty=c(2,2), cex=1.0,bty='n')
+  if(!anyNA(plot_det) && det_graph==TRUE){
+    plot_interv_inf = pmax(plot_det - 1.96*sqrt(plot_var_det), 0)
+    plot_interv_sup = plot_det + 1.96*sqrt(plot_var_det)
+    lim_y = c(min(plot_interv_inf, plot_binf_boot, na.rm=TRUE), 1.1*max(plot_interv_sup, plot_bsup_boot, na.rm=TRUE))
+    plot(n_samp_min+step_mc*(0:(max(p-2,0))), plot_det, xlim=c(1,n_samp_min+step_mc*max(p-2,0)), xlab="Number of MC samples", ylab="Normalized determinant of the FIM",
+    ylim=lim_y, type = "l", col=1, bty='n', lwd=2, main = paste(expression(det(FIM)^frac(1,p)), " for optimal design", sep=""))
+    lines(n_samp_min+step_mc*(0:(max(p-2,0))), plot_interv_inf, type = "l", col=3, lty=2)
+    lines(n_samp_min+step_mc*(0:(max(p-2,0))), plot_interv_sup, type = "l", col=3, lty=2)
+    lines(n_samp_min+step_mc*(0:(max(p-2,0))), plot_binf_boot, type = "l", col=2, lty=2)
+    lines(n_samp_min+step_mc*(0:(max(p-2,0))), plot_bsup_boot, type = "l", col=2, lty=2)
+    legend(x=0.6*n_samp_min+step_mc*(max(p-2,0)),y=lim_y[2],legend=c("IC normal", "IC bootstrap"),col=c(3,2),lty=c(2,2), cex=1.0,bty='n')
+  }
   RSE = res_temp$RSE
-  boot_rse = bootstrap_ic_rse(res_A[[p-1]][[ind_opt_p]][[1]], res_A[[p-1]][[ind_opt_p]][[2]], n_samp_min+step_mc*(p-2), nb_params, L_boot, params, nb_patients)
-  rse_inf_boot = boot_rse$binf
-  rse_sup_boot = boot_rse$bsup
+  inv_fim_opt_t = try(solve(Fisher_matrix), silent = TRUE)  
+  if(!is.null(attributes(inv_fim_opt_t)$class)){
+    rse_inf_boot = NA
+    rse_sup_boot = NA
+  }
+  else{  
+    boot_rse = bootstrap_ic_rse(res_A[[max(p-1,1)]][[ind_opt_p]][[1]], res_A[[max(p-1,1)]][[ind_opt_p]][[2]], n_samp_min+step_mc*max(p-2,0), nb_params, L_boot, params, nb_patients)
+    rse_inf_boot = boot_rse$binf
+    rse_sup_boot = boot_rse$bsup
+  }
   
   res_return = list("opt_t"=mat_comb, "FIM_opt_t"=Fisher_matrix, "FIM_covar_opt_t" = Fisher_matrix_covar,
-               "inv_FIM_opt_t" =solve(Fisher_matrix),
+               "inv_FIM_opt_t" = inv_fim_opt_t,
                "RSE_opt_t"=RSE, "RSE_inf_boot_opt_t"=rse_inf_boot, "RSE_sup_boot_opt_t"=rse_sup_boot,
                "det_norm_FIM_opt_t"=det_norm_Fisher_matrix, 
                "IC_normal_opt_t"=c(born_normal_inf, born_normal_sup),
-               "IC_boot_opt_t"=c(born_boot_inf, born_boot_sup),
+               "IC_boot_opt_t"=c(born_boot_inf^(1/nb_params), born_boot_sup^(1/nb_params)),
                "list_select"=list_select, "list_det"=list_det, 
                "list_boot_inf"=list_binf, "list_boot_sup"=list_bsup, "list_fim"=list_fim)
-  
   return(res_return)
 }
 
